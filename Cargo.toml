@@ -1,0 +1,10 @@
+[package]
+name = "fsearch-plugin-app-lancher"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fsearch-core = "0.0.6"
+xdgkit = "3.2.5"
