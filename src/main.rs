@@ -13,7 +13,14 @@ fn main() {
     let query = &args[1];
     let result = search(query);
     if result.is_none() {
-        println!("No match found");
+        let response = PluginResponse {
+            error: Some("No match found".to_string()),
+            gtk: None,
+            action: None,
+            set_icon: None,
+        };
+        let response = fsearch_core::plugin_response_to_json(response);
+        println!("{}", response);
         return;
     }
     let result = result.unwrap();
