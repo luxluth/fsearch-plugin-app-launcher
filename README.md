@@ -1,0 +1,1 @@
+# fsearch-plugin-app-launcher
