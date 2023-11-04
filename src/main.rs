@@ -1,9 +1,9 @@
-use fsearch_core::{GtkComponent, GtkComponentBuilder, GtkComponentType, PluginAction, PluginActionType, PluginResponse};
+use fsearch_core::{Element, ElementBuilder, DataType, PluginAction, PluginActionType, PluginResponse};
 use fsearch_core;
-use fsearch_core::Align;
 use xdgkit::desktop_entry::*;
 use xdgkit::icon_finder;
-use std::fs::File;
+use xdgkit::basedir::home;
+use std::fs::{File, ReadDir};
 use std::io::prelude::*;
 use std::path::PathBuf;
 
@@ -15,7 +15,8 @@ fn main() {
     if result.is_none() {
         let response = PluginResponse {
             error: Some("No match found".to_string()),
-            gtk: None,
+            title: Some("Launch".to_string()),
+            elements: Vec::new(),
             action: None,
             set_icon: None,
         };
@@ -25,7 +26,7 @@ fn main() {
     }
     let result = result.unwrap();
 
-    let mut content = Vec::<GtkComponent>::new();
+    let mut elements = Vec::<Element>::new();
     let mut i = 0;
     let mut icon = None;
     let mut exec = String::new();
@@ -34,43 +35,60 @@ fn main() {
             icon = entry.icon.clone();
             exec = entry.exec.clone();
         }
-        let gtk_entry = entry_to_gtk(entry);
-        content.push(gtk_entry);
+        let element = entry_to_element(entry);
+        elements.push(element);
         i += 1;
     }
 
-    let icon_path = match icon {
-        Some(icon) => icon.to_str().unwrap().to_string(),
-        None => "".to_string(),
-    };
-    
-    let gtk = fsearch_core::contentify("Launch".to_string(), content);
+    if elements.len() == 0 {
+        let response = PluginResponse {
+            title: Some("Launch".to_string()),
+            error: Some("No match found".to_string()),
+            elements: Vec::new(),
+            action: None,
+            set_icon: None,
+        };
+        let response = fsearch_core::plugin_response_to_json(response);
+        println!("{}", response);
+        return;
+    }
+
     let response = PluginResponse {
+        title: Some("Launch".to_string()),
         error: None,
-        gtk: Some(vec![gtk]),
+        elements,
         action: Some(PluginAction {
             action: PluginActionType::Launch(exec),
             close_after_run: Some(true),
         }),
-        set_icon: Some(icon_path),
+        set_icon: icon,
     };
 
     let response = fsearch_core::plugin_response_to_json(response);
     println!("{}", response);
 }
 
-fn entry_to_gtk(entry: DesktopEntryBase) -> GtkComponent {
-    let label = fsearch_core::new_label(entry.name, "Launcher-Button-Label".to_string(), vec![], Some(true), Some(Align::Start));
-    let comment = fsearch_core::new_label(entry.comment.unwrap_or("".to_string()), "Launcher-Button-Comment".to_string(), vec![], Some(true), Some(Align::Start));
+fn entry_to_element(entry: DesktopEntryBase) -> Element {
+    // TODO: add icon 
+    let label = ElementBuilder::new(DataType::Label)
+        .id("Launcher-Button-Label")
+        .text(entry.name.as_str())
+        .build();
 
-    let button = GtkComponentBuilder::new(GtkComponentType::Button)
-        .id("Launcher-Button".to_string())
-        .add_children(vec![label, comment])
+    let comment = ElementBuilder::new(DataType::Label)
+        .id("Launcher-Button-Comment")
+        .text(entry.comment.unwrap_or("".to_string()).as_str())
+        .build();
+
+    let button = ElementBuilder::new(DataType::Button)
+        .id("Launcher-Button")
+        .children(vec![label, comment])
         .on_click(PluginAction {
             action: PluginActionType::Launch(entry.exec),
             close_after_run: Some(true),
         })
         .build();
+
     button
 }
 
@@ -78,19 +96,35 @@ fn entry_to_gtk(entry: DesktopEntryBase) -> GtkComponent {
 struct DesktopEntryBase {
     name: String,
     exec: String,
-    icon: Option<PathBuf>,
+    icon: Option<String>,
     comment: Option<String>,
 }
 
-fn find_desktop_file(app_name: &str) -> Option<Vec<DesktopEntryBase>> {
-    // parse all desktop files to find a match in the name 
-    // return the first 4 matches path
-    // if no match found, return an None
-    
+fn get_icon_path(icon_name: String) -> Option<String> {
+    let path = PathBuf::from(icon_name.clone());
+    if path.exists() {
+        return Some(icon_name);
+    }
+
+    let icon = match icon_finder::find_icon(icon_name, 48, 1) {
+        Some(icon) => Some(icon),
+        None => None,
+    };
+
+    if icon.is_none() {
+        return None;
+    }
+
+    let icon = icon.unwrap();
+    let icon = icon.to_str().unwrap().to_string();
+    Some(icon)
+}
+
+fn get_desktop_entry(query: String, dir: ReadDir, max: usize) -> Vec<DesktopEntryBase> {
     let mut matches = Vec::<DesktopEntryBase>::new();
-    let desktop_files = std::fs::read_dir("/usr/share/applications").unwrap();
-    for file in desktop_files {
-        if matches.len() >= 4 {
+
+    for file in dir {
+        if matches.len() >= max {
             break;
         }
 
@@ -107,12 +141,34 @@ fn find_desktop_file(app_name: &str) -> Option<Vec<DesktopEntryBase>> {
             file.read_to_string(&mut contents).unwrap();
             let entry = DesktopEntry::read(contents);
             if entry.name.is_some() {
-                let name = entry.name.unwrap();
-                if name.to_lowercase().contains(app_name.to_lowercase().as_str()) {
+                let name = entry.name.clone().unwrap();
+                if name.to_lowercase().contains(query.to_lowercase().as_str()) {
                     let base = DesktopEntryBase {
-                        name,
-                        exec: entry.exec.unwrap(),
-                        icon: get_icon(entry.icon.unwrap()),
+                        name: entry.name.unwrap(),
+                        exec: entry.exec.unwrap_or("".to_string()),
+                        icon: get_icon_path(entry.icon.unwrap_or("application-default-icon".to_string())),
+                        comment: entry.comment,
+                    };
+                    matches.push(base);
+                }
+            } else if entry.generic_name.is_some() {
+                let name = entry.generic_name.unwrap();
+                if name.to_lowercase().contains(query.to_lowercase().as_str()) {
+                    let base = DesktopEntryBase {
+                        name: entry.name.unwrap(),
+                        exec: entry.exec.unwrap_or("".to_string()),
+                        icon: get_icon_path(entry.icon.unwrap_or("application-default-icon".to_string())),
+                        comment: entry.comment,
+                    };
+                    matches.push(base);
+                }
+            } else if entry.comment.is_some() {
+                let name = entry.comment.clone().unwrap();
+                if name.to_lowercase().contains(query.to_lowercase().as_str()) {
+                    let base = DesktopEntryBase {
+                        name: entry.name.unwrap(),
+                        exec: entry.exec.unwrap_or("".to_string()),
+                        icon: get_icon_path(entry.icon.unwrap_or("application-default-icon".to_string())),
                         comment: entry.comment,
                     };
                     matches.push(base);
@@ -120,20 +176,38 @@ fn find_desktop_file(app_name: &str) -> Option<Vec<DesktopEntryBase>> {
             }
         }
     }
-    if matches.len() > 0 {
-        Some(matches)
-    } else {
-        None
-    }
+
+
+    matches
 }
 
 
-fn get_icon(icon_name: String) -> Option<PathBuf> {
-    let icon = match icon_finder::find_icon(icon_name, 48, 1) {
-        Some(icon) => Some(icon),
-        None => None,
-    };
-    icon
+fn find_desktop_file(app_name: &str) -> Option<Vec<DesktopEntryBase>> {
+    // parse all desktop files to find a match in the name 
+    // return the first 4 matches path
+    // if no match found, return an None
+    let mut matches = Vec::<DesktopEntryBase>::new();
+    let homdir = home().unwrap();
+    let user_desktop_files = std::fs::read_dir("/usr/share/applications");
+    let local_desktop_files = std::fs::read_dir(format!("{}/.local/share/applications", homdir));
+    if user_desktop_files.is_err() || local_desktop_files.is_err() {
+        return None;
+    }
+
+    let user_desktop_files = user_desktop_files.unwrap();
+    let local_desktop_files = local_desktop_files.unwrap();
+
+    let user_matches = get_desktop_entry(app_name.to_string(), user_desktop_files, 10);
+    let local_matches = get_desktop_entry(app_name.to_string(), local_desktop_files, 10);
+
+    matches.extend(user_matches);
+    matches.extend(local_matches);
+
+    if matches.len() == 0 {
+        return None;
+    }
+
+    Some(matches)
 }
 
 /// Search for the given app name in desktop files and print the result

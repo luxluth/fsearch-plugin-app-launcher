@@ -58,9 +58,9 @@ checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
 name = "fsearch-core"
-version = "0.0.6"
+version = "0.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01a46e9c40b88d831d5a46388e3347fc774fbeefda6c535c9d95e7099ac4a83d"
+checksum = "32e0d0685aa802da334840cbc3fd23f3103932e19219658b351b3f4b4b58a56a"
 dependencies = [
  "serde",
  "serde_json",
