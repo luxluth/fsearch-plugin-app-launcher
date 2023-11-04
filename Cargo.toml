@@ -7,6 +7,7 @@ description = "A plugin for fsearch to launch applications"
 homepage = "https://github.com/luxluth/fsearch-plugin-app-launcher#readme"
 repository = "https://github.com/luxluth/fsearch-plugin-app-launcher.git"
 keywords = ["fsearch", "plugins", "launcher", "applications"]
+license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
