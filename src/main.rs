@@ -97,7 +97,7 @@ fn entry_to_element(entry: DesktopEntryBase) -> Element {
         .text(entry.comment.unwrap_or("".to_string()).as_str())
         .build();
 
-    let button = ElementBuilder::new(DataType::Button)
+    let button = ElementBuilder::new(DataType::EventBox)
         .id("Launcher-Button")
         .children(vec![label, comment])
         .on_click(PluginAction {
