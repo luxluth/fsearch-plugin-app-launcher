@@ -2,7 +2,6 @@ use fsearch_core::{Element, ElementBuilder, DataType, PluginAction, PluginAction
 use fsearch_core;
 use xdgkit::desktop_entry::*;
 use xdgkit::icon_finder;
-use xdgkit::basedir::home;
 use std::fs::{File, ReadDir};
 use std::io::prelude::*;
 use std::path::PathBuf;
@@ -187,7 +186,7 @@ fn find_desktop_file(app_name: &str) -> Option<Vec<DesktopEntryBase>> {
     // return the first 4 matches path
     // if no match found, return an None
     let mut matches = Vec::<DesktopEntryBase>::new();
-    let homdir = home().unwrap();
+    let homdir = std::env::var("HOME").unwrap_or("".to_string());
     let user_desktop_files = std::fs::read_dir("/usr/share/applications");
     let local_desktop_files = std::fs::read_dir(format!("{}/.local/share/applications", homdir));
     if user_desktop_files.is_err() || local_desktop_files.is_err() {

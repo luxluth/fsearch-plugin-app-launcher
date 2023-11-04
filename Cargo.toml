@@ -1,6 +1,6 @@
 [package]
 name = "fsearch-plugin-app-lancher"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 authors = ["luxluth <delphin.blehoussi93@gmail.com>"]
 description = "A plugin for fsearch to launch applications"
