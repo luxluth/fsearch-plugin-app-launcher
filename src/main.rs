@@ -10,8 +10,8 @@ use serde::{Serialize, Deserialize};
 use serde_json;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-
 const CACHE_PATH: &str = "/tmp/fsearch_desktop_cache.json";
+const DEFAULT_ICON_PATH: &str = "/usr/share/icons/Adwaita/scalable/mimetypes/application-x-executable.svg";
 
 /// Main entry point for the application, it search for the given app name in desktop files and print the result
 fn main() {
@@ -93,7 +93,7 @@ fn entry_to_element(entry: DesktopEntryBase) -> Element {
             .build(),
         None => ElementBuilder::new(DataType::Image)
             .id("Launcher-Box-Icon")
-            .image_path("loupe")
+            .image_path(DEFAULT_ICON_PATH)
             .build(),
     };
 
@@ -176,7 +176,7 @@ fn get_desktop_entry(query: String, dir: ReadDir, max: usize) -> Vec<DesktopEntr
                         name: entry.name.unwrap(),
                         exec: entry.exec.unwrap_or("".to_string()),
                         generic_name: entry.generic_name,
-                        icon: get_icon_path(entry.icon.unwrap_or("loupe".to_string())),
+                        icon: get_icon_path(entry.icon.unwrap_or(DEFAULT_ICON_PATH.to_string())),
                         comment: entry.comment,
                     };
                     matches.push(base);
@@ -188,7 +188,7 @@ fn get_desktop_entry(query: String, dir: ReadDir, max: usize) -> Vec<DesktopEntr
                         name: entry.name.unwrap(),
                         exec: entry.exec.unwrap_or("".to_string()),
                         generic_name: entry.generic_name,
-                        icon: get_icon_path(entry.icon.unwrap_or("loupe".to_string())),
+                        icon: get_icon_path(entry.icon.unwrap_or(DEFAULT_ICON_PATH.to_string())),
                         comment: entry.comment,
                     };
                     matches.push(base);
@@ -200,7 +200,7 @@ fn get_desktop_entry(query: String, dir: ReadDir, max: usize) -> Vec<DesktopEntr
                         name: entry.name.unwrap(),
                         exec: entry.exec.unwrap_or("".to_string()),
                         generic_name: entry.generic_name,
-                        icon: get_icon_path(entry.icon.unwrap_or("loupe".to_string())),
+                        icon: get_icon_path(entry.icon.unwrap_or(DEFAULT_ICON_PATH.to_string())),
                         comment: entry.comment,
                     };
                     matches.push(base);
