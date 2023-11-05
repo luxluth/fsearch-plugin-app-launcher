@@ -88,22 +88,22 @@ fn main() {
 fn entry_to_element(entry: DesktopEntryBase) -> Element {
     let icon = match entry.icon {
         Some(icon) => ElementBuilder::new(DataType::Image)
-            .id("Launcher-Box-Icon")
+            .id("LauncherBoxIcon")
             .image_path(icon.as_str())
             .build(),
         None => ElementBuilder::new(DataType::Image)
-            .id("Launcher-Box-Icon")
+            .id("LauncherBoxIcon")
             .image_path(DEFAULT_ICON_PATH)
             .build(),
     };
 
     let label = ElementBuilder::new(DataType::Label)
-        .id("Launcher-Box-Label")
+        .id("LauncherBoxLabel")
         .text(entry.name.as_str())
         .build();
 
     let button = ElementBuilder::new(DataType::EventBox)
-        .id("Launcher-Box")
+        .id("LauncherBox")
         .children(vec![icon, label])
         .on_click(PluginAction {
             action: PluginActionType::Launch(entry.exec),
