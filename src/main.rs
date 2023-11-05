@@ -86,20 +86,25 @@ fn main() {
 }
 
 fn entry_to_element(entry: DesktopEntryBase) -> Element {
-    // TODO: add icon 
+    let icon = match entry.icon {
+        Some(icon) => ElementBuilder::new(DataType::Image)
+            .id("Launcher-Box-Icon")
+            .image_path(icon.as_str())
+            .build(),
+        None => ElementBuilder::new(DataType::Image)
+            .id("Launcher-Box-Icon")
+            .image_path("loupe")
+            .build(),
+    };
+
     let label = ElementBuilder::new(DataType::Label)
-        .id("Launcher-Button-Label")
+        .id("Launcher-Box-Label")
         .text(entry.name.as_str())
         .build();
 
-    let comment = ElementBuilder::new(DataType::Label)
-        .id("Launcher-Button-Comment")
-        .text(entry.comment.unwrap_or("".to_string()).as_str())
-        .build();
-
     let button = ElementBuilder::new(DataType::EventBox)
-        .id("Launcher-Button")
-        .children(vec![label, comment])
+        .id("Launcher-Box")
+        .children(vec![icon, label])
         .on_click(PluginAction {
             action: PluginActionType::Launch(entry.exec),
             close_after_run: Some(true),
@@ -171,7 +176,7 @@ fn get_desktop_entry(query: String, dir: ReadDir, max: usize) -> Vec<DesktopEntr
                         name: entry.name.unwrap(),
                         exec: entry.exec.unwrap_or("".to_string()),
                         generic_name: entry.generic_name,
-                        icon: get_icon_path(entry.icon.unwrap_or("application-default-icon".to_string())),
+                        icon: get_icon_path(entry.icon.unwrap_or("loupe".to_string())),
                         comment: entry.comment,
                     };
                     matches.push(base);
@@ -183,7 +188,7 @@ fn get_desktop_entry(query: String, dir: ReadDir, max: usize) -> Vec<DesktopEntr
                         name: entry.name.unwrap(),
                         exec: entry.exec.unwrap_or("".to_string()),
                         generic_name: entry.generic_name,
-                        icon: get_icon_path(entry.icon.unwrap_or("application-default-icon".to_string())),
+                        icon: get_icon_path(entry.icon.unwrap_or("loupe".to_string())),
                         comment: entry.comment,
                     };
                     matches.push(base);
@@ -195,7 +200,7 @@ fn get_desktop_entry(query: String, dir: ReadDir, max: usize) -> Vec<DesktopEntr
                         name: entry.name.unwrap(),
                         exec: entry.exec.unwrap_or("".to_string()),
                         generic_name: entry.generic_name,
-                        icon: get_icon_path(entry.icon.unwrap_or("application-default-icon".to_string())),
+                        icon: get_icon_path(entry.icon.unwrap_or("loupe".to_string())),
                         comment: entry.comment,
                     };
                     matches.push(base);

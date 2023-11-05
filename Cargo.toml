@@ -1,6 +1,6 @@
 [package]
 name = "fsearch-plugin-app-lancher"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 authors = ["luxluth <delphin.blehoussi93@gmail.com>"]
 description = "A plugin for fsearch to launch applications"
@@ -11,7 +11,7 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fsearch-core = "0.0.8"
+fsearch-core = "0.0.9"
 serde = { version = "1.0.190", features = ["derive"] }
 serde_json = "1.0.108"
 xdgkit = "3.2.5"
