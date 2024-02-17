@@ -1,17 +1,21 @@
-use fsearch_core::{Element, ElementBuilder, DataType, PluginAction, PluginActionType, PluginResponse};
-use fsearch_core;
-use xdgkit::desktop_entry::*;
-use xdgkit::icon_finder;
-use xdgkit::user_dirs::UserDirs;
+use fsearch_core::{
+    DataType, Element, ElementBuilder, PluginAction, PluginActionType, PluginResponse,
+};
+use serde::{Deserialize, Serialize};
 use std::fs::{File, ReadDir};
 use std::io::prelude::*;
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
-use serde_json;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+use xdgkit::basedir::applications;
+use xdgkit::desktop_entry::*;
+use xdgkit::icon_finder;
+use xdgkit::user_dirs::UserDirs;
 
 const CACHE_PATH: &str = "/tmp/fsearch_desktop_cache.json";
-const DEFAULT_ICON_PATH: &str = "/usr/share/icons/Adwaita/scalable/mimetypes/application-x-executable.svg";
+const DEFAULT_ICON_PATH: &str =
+    "/usr/share/icons/Adwaita/scalable/mimetypes/application-x-executable.svg";
 
 /// Main entry point for the application, it search for the given app name in desktop files and print the result
 fn main() {
@@ -41,23 +45,21 @@ fn main() {
         println!("{}", response);
         return;
     }
-    let result = result.unwrap();
+    let result = result.unwrap().into_iter().enumerate();
 
     let mut elements = Vec::<Element>::new();
-    let mut i = 0;
     let mut icon = None;
     let mut exec = String::new();
-    for entry in result {
+    for (i, entry) in result {
         if i == 0 {
             icon = entry.icon.clone();
             exec = entry.exec.clone();
         }
-        let element = entry_to_element(entry);
+        let element = entry_to_element(&entry);
         elements.push(element);
-        i += 1;
     }
 
-    if elements.len() == 0 {
+    if elements.is_empty() {
         let response = PluginResponse {
             title: Some("Launch".to_string()),
             error: Some("No match found".to_string()),
@@ -85,11 +87,11 @@ fn main() {
     println!("{}", response);
 }
 
-fn entry_to_element(entry: DesktopEntryBase) -> Element {
-    let icon = match entry.icon {
+fn entry_to_element(entry: &DesktopEntryBase) -> Element {
+    let icon = match &entry.icon {
         Some(icon) => ElementBuilder::new(DataType::Image)
             .id("LauncherBoxIcon")
-            .image_path(icon.as_str())
+            .image_path(icon)
             .build(),
         None => ElementBuilder::new(DataType::Image)
             .id("LauncherBoxIcon")
@@ -99,54 +101,44 @@ fn entry_to_element(entry: DesktopEntryBase) -> Element {
 
     let label = ElementBuilder::new(DataType::Label)
         .id("LauncherBoxLabel")
-        .text(entry.name.as_str())
+        .text(&entry.name)
         .build();
 
-    let button = ElementBuilder::new(DataType::EventBox)
+    ElementBuilder::new(DataType::EventBox)
         .id("LauncherBox")
         .children(vec![icon, label])
         .on_click(PluginAction {
-            action: PluginActionType::Launch(entry.exec),
+            action: PluginActionType::Launch(String::from(&entry.exec)),
             close_after_run: Some(true),
         })
-        .build();
-
-    button
+        .build()
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct DesktopEntryBase {
     name: String,
     exec: String,
     icon: Option<String>,
     comment: Option<String>,
-    generic_name: Option<String>
+    generic_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CachedEntries {
     entries: Vec<DesktopEntryBase>,
-    last_update: u64
+    last_update: u64,
 }
 
 fn get_icon_path(icon_name: String) -> Option<String> {
-    let path = PathBuf::from(icon_name.clone());
+    let path = PathBuf::from(&icon_name);
     if path.exists() {
         return Some(icon_name);
     }
 
-    let icon = match icon_finder::find_icon(icon_name, 48, 1) {
-        Some(icon) => Some(icon),
-        None => None,
+    if let Some(icon) = icon_finder::find_icon(icon_name, 128, 1) {
+        return Some(icon.to_str().unwrap().to_string());
     };
-
-    if icon.is_none() {
-        return None;
-    }
-
-    let icon = icon.unwrap();
-    let icon = icon.to_str().unwrap().to_string();
-    Some(icon)
+    None
 }
 
 fn get_desktop_entry(query: String, dir: ReadDir, max: usize) -> Vec<DesktopEntryBase> {
@@ -160,12 +152,12 @@ fn get_desktop_entry(query: String, dir: ReadDir, max: usize) -> Vec<DesktopEntr
         if file.is_err() {
             continue;
         }
-        
+
         let file = file.unwrap();
         let path = file.path();
         let file_name = path.file_name().unwrap().to_str().unwrap();
         if file_name.ends_with(".desktop") {
-            let mut file = File::open(path.clone()).unwrap();
+            let mut file = File::open(path).unwrap();
             let mut contents = String::new();
             file.read_to_string(&mut contents).unwrap();
             let entry = DesktopEntry::read(contents);
@@ -193,26 +185,12 @@ fn get_desktop_entry(query: String, dir: ReadDir, max: usize) -> Vec<DesktopEntr
                     };
                     matches.push(base);
                 }
-            } else if entry.comment.is_some() {
-                let name = entry.comment.clone().unwrap();
-                if name.to_lowercase().contains(query.to_lowercase().as_str()) {
-                    let base = DesktopEntryBase {
-                        name: entry.name.unwrap(),
-                        exec: entry.exec.unwrap_or("".to_string()),
-                        generic_name: entry.generic_name,
-                        icon: get_icon_path(entry.icon.unwrap_or(DEFAULT_ICON_PATH.to_string())),
-                        comment: entry.comment,
-                    };
-                    matches.push(base);
-                }
             }
         }
     }
 
-
     matches
 }
-
 
 fn get_cache() -> Option<String> {
     let path = PathBuf::from(CACHE_PATH);
@@ -227,16 +205,9 @@ fn get_cache() -> Option<String> {
 }
 
 fn get_cache_entries() -> Option<CachedEntries> {
-    let cache = get_cache();
-    if cache.is_none() {
-        return None;
-    }
-
-    let cache = cache.unwrap();
-    let entries: CachedEntries = serde_json::from_str(&cache).unwrap();
-
-    Some(entries)
-
+    let get_c = get_cache();
+    let cache = get_c.as_ref()?;
+    Some(serde_json::from_str(cache).unwrap())
 }
 
 fn has_cache() -> bool {
@@ -246,11 +217,13 @@ fn has_cache() -> bool {
 
 /// Create a cache of all desktop files in the system to /tmp/fsearch_desktop_cache
 fn update_desktop_cache() {
-
     let matches = get_matches("", 1000, false);
     let cached_entries = CachedEntries {
         entries: matches,
-        last_update: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+        last_update: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
     };
 
     let cache = serde_json::to_string(&cached_entries).unwrap();
@@ -259,32 +232,28 @@ fn update_desktop_cache() {
     file.write_all(cache.as_bytes()).unwrap();
 }
 
-fn get_matches(
-    query: &str, 
-    limit: usize,
-    use_cache: bool,
-    ) -> Vec<DesktopEntryBase> {
-    let mut matches = Vec::<DesktopEntryBase>::new();
+fn get_matches(query: &str, limit: usize, use_cache: bool) -> Vec<DesktopEntryBase> {
+    let query = query.to_lowercase();
 
     if use_cache && has_cache() {
-        let cache_entries = get_cache_entries();
-        if cache_entries.is_some() {
+        let mut matches = Vec::<DesktopEntryBase>::new();
+        if let Some(cache_entries) = get_cache_entries() {
             let mut count = 0;
-            for entry in cache_entries.unwrap().entries {
+            for entry in cache_entries.entries {
                 if count >= limit {
                     break;
                 }
 
-                if entry.name.to_lowercase().contains(query.to_lowercase().as_str()) {
+                if entry.name.to_lowercase().contains(&query) {
                     matches.push(entry);
                     count += 1;
-                } else if entry.generic_name.is_some() {
-                    if entry.generic_name.clone().unwrap().to_lowercase().contains(query.to_lowercase().as_str()) {
+                } else if let Some(generic_name) = &entry.generic_name {
+                    if generic_name.to_lowercase().contains(&query) {
                         matches.push(entry);
                         count += 1;
                     }
-                } else if entry.comment.is_some() {
-                    if entry.comment.clone().unwrap().to_lowercase().contains(query.to_lowercase().as_str()) {
+                } else if let Some(comment) = &entry.comment {
+                    if comment.to_lowercase().contains(&query) {
                         matches.push(entry);
                         count += 1;
                     }
@@ -294,53 +263,71 @@ fn get_matches(
 
         return matches;
     }
-    
 
-    let user_dirs = UserDirs::new();
+    let matches = Arc::new(Mutex::new(Vec::<DesktopEntryBase>::new()));
+    let user_dirs = Arc::new(UserDirs::new());
     let homdir = std::env::var("HOME").unwrap_or("".to_string());
-    let user_desktop_files = std::fs::read_dir("/usr/share/applications");
-    let user_shared_desktop_files = std::fs::read_dir("/usr/local/share/applications");
-    let local_desktop_files = std::fs::read_dir(format!("{}/.local/share/applications", homdir));
-    let desktop_path = user_dirs.desktop.clone().replace("$HOME", homdir.as_str());
-    let on_desktop_files = std::fs::read_dir(desktop_path);
-    let flatpak_desktop_files = std::fs::read_dir("/var/lib/flatpak/exports/share/applications");
-    
-    if user_desktop_files.is_ok() {
-        let user_desktop_files = user_desktop_files.unwrap();
-        let user_matches = get_desktop_entry(query.to_string(), user_desktop_files, limit);
-        matches.extend(user_matches);
+    let desktop_path = user_dirs.desktop.replace("$HOME", homdir.as_str());
+
+    let mut threads: Vec<_> = vec![];
+
+    if let Ok(apps) = applications() {
+        let apps: Vec<_> = apps.split(':').collect();
+        for app_folder in apps {
+            threads.push(spawn_thread(app_folder.to_string(), limit, matches.clone()))
+        }
+    } else {
+        threads = vec![
+            spawn_thread(
+                "/usr/share/applications".to_string(),
+                limit,
+                matches.clone(),
+            ),
+            spawn_thread(
+                "/usr/local/share/applications".to_string(),
+                limit,
+                matches.clone(),
+            ),
+            spawn_thread(
+                format!("{}/.local/share/applications", homdir),
+                limit,
+                matches.clone(),
+            ),
+            spawn_thread(desktop_path, limit, matches.clone()),
+            spawn_thread(
+                "/var/lib/flatpak/exports/share/applications".to_string(),
+                limit,
+                matches.clone(),
+            ),
+        ];
     }
 
-    if user_shared_desktop_files.is_ok() {
-        let user_shared_desktop_files = user_shared_desktop_files.unwrap();
-        let user_shared_matches = get_desktop_entry(query.to_string(), user_shared_desktop_files, limit);
-        matches.extend(user_shared_matches);
+    for handle in threads {
+        handle.join().unwrap();
     }
 
-    if local_desktop_files.is_ok() {
-        let local_desktop_files = local_desktop_files.unwrap();
-        let local_matches = get_desktop_entry(query.to_string(), local_desktop_files, limit);
-        matches.extend(local_matches);
-    }
+    let mut locked_matches = matches.lock().unwrap();
+    locked_matches.sort_by(|a, b| a.name.cmp(&b.name));
+    Vec::from(locked_matches.as_slice())
+}
 
-    if on_desktop_files.is_ok() {
-        let on_desktop_files = on_desktop_files.unwrap();
-        let on_matches = get_desktop_entry("".to_string(), on_desktop_files, limit);
-        matches.extend(on_matches);
-    }
-
-    if flatpak_desktop_files.is_ok() {
-        let flatpak_desktop_files = flatpak_desktop_files.unwrap();
-        let flatpak_matches = get_desktop_entry(query.to_string(), flatpak_desktop_files, limit);
-        matches.extend(flatpak_matches);
-    }
-
-    matches.sort_by(|a, b| a.name.cmp(&b.name));
-    matches
+fn spawn_thread(
+    dir: String,
+    limit: usize,
+    matches: Arc<Mutex<Vec<DesktopEntryBase>>>,
+) -> thread::JoinHandle<()> {
+    let matches_clone = Arc::clone(&matches);
+    thread::spawn(move || {
+        if let Ok(files) = std::fs::read_dir(dir) {
+            let user_matches = get_desktop_entry("".to_string(), files, limit);
+            let mut locked_matches = matches_clone.lock().unwrap();
+            locked_matches.extend(user_matches);
+        }
+    })
 }
 
 fn find_desktop_file(app_name: &str) -> Vec<DesktopEntryBase> {
-   get_matches(app_name, 10, true) 
+    get_matches(app_name, 10, true)
 }
 
 /// Search for the given app name in desktop files and print the result
